@@ -1,85 +1,45 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, getFrontMatterInfo, stringifyYaml } from 'obsidian';
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface TodaysThoughtSettings {
+	prompts: string[];
+	dailyNoteFolder: string;
+	dailyNoteFormat: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+//FIXME read locations from settings
+const DEFAULT_SETTINGS: TodaysThoughtSettings = {
+	prompts: [
+		"What's on your mind right now?",
+		"What are you thinking about today?",
+		"Share a thought that's important to you right now.",
+		"What are you curious about today?",
+		"What's something you're currently processing?"
+	],
+	dailyNoteFolder: '/Journal',
+	dailyNoteFormat: 'YYYY-MM-DD'
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class TodaysThoughtPlugin extends Plugin {
+	settings: TodaysThoughtSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
+		// Add the command for today's thought
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
+			id: 'todays-thought',
+			name: 'Capture today\'s thought',
 			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
+				new ThoughtModal(this.app, this).open();
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		// Add settings tab
+		this.addSettingTab(new TodaysThoughtSettingTab(this.app, this));
 	}
 
 	onunload() {
-
+		// Nothing specific to unload
 	}
 
 	async loadSettings() {
@@ -89,16 +49,182 @@ export default class MyPlugin extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	getRandomPrompt(): string {
+		return this.settings.prompts[Math.floor(Math.random() * this.settings.prompts.length)];
+	}
+
+	async getDailyNote(date: moment.Moment): Promise<TFile | null> {
+		const { vault } = this.app;
+		const { dailyNoteFolder, dailyNoteFormat } = this.settings;
+		
+		// Use moment.js format (already included in Obsidian)
+		const fileName = date.format(dailyNoteFormat) + '.md';
+		const folderPath = dailyNoteFolder !== '/' ? dailyNoteFolder : '';
+		const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
+		
+		let file = vault.getAbstractFileByPath(filePath);
+		
+		if (file instanceof TFile) {
+			return file;
+		}
+		
+		return null;
+	}
+
+	async createOrUpdateDailyNote(date: moment.Moment, thought: string): Promise<void> {
+		const { vault } = this.app;
+		const { dailyNoteFolder, dailyNoteFormat } = this.settings;
+		
+		// Create folder if it doesn't exist
+		if (dailyNoteFolder !== '/' && !vault.getAbstractFileByPath(dailyNoteFolder)) {
+			await vault.createFolder(dailyNoteFolder);
+		}
+		
+		const fileName = date.format(dailyNoteFormat) + '.md';
+		const folderPath = dailyNoteFolder !== '/' ? dailyNoteFolder : '';
+		const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
+		
+		let file = vault.getAbstractFileByPath(filePath);
+		
+		if (!(file instanceof TFile)) {
+			// Create new note if it doesn't exist
+			file = await vault.create(filePath, '---\n---\n\n');
+		}
+		
+		// Now update the frontmatter
+		if (file instanceof TFile) {
+			const content = await vault.read(file);
+			const frontmatterInfo = getFrontMatterInfo(content);
+			let frontmatter = frontmatterInfo.frontmatter ? {...frontmatterInfo.frontmatter} : {};
+			
+			// Add today's thought to frontmatter
+			frontmatter.todaysThought = thought;
+			
+			// Create new content with updated frontmatter
+			const newContent = `---\n${stringifyYaml(frontmatter)}---\n${frontmatterInfo.content || '\n'}`;
+			
+			// Write back to file
+			await vault.modify(file, newContent);
+		}
+	}
+
+	async getPreviousThoughts(): Promise<{today: string, yesterday: string, threeDaysAgo: string, lastWeek: string}> {
+		const today = window.moment();
+		const yesterday = window.moment().subtract(1, 'day');
+		const threeDaysAgo = window.moment().subtract(3, 'days');
+		const lastWeek = window.moment().subtract(7, 'days');
+		
+		const result = {
+			today: '',
+			yesterday: '',
+			threeDaysAgo: '',
+			lastWeek: ''
+		};
+		
+		// Check today's note
+		const todayFile = await this.getDailyNote(today);
+		if (todayFile) {
+			const content = await this.app.vault.read(todayFile);
+			const frontmatterInfo = getFrontMatterInfo(content);
+			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
+				result.today = frontmatterInfo.frontmatter.todaysThought;
+			}
+		}
+		
+		// Check yesterday's note
+		const yesterdayFile = await this.getDailyNote(yesterday);
+		if (yesterdayFile) {
+			const content = await this.app.vault.read(yesterdayFile);
+			const frontmatterInfo = getFrontMatterInfo(content);
+			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
+				result.yesterday = frontmatterInfo.frontmatter.todaysThought;
+			}
+		}
+		
+		// Check 3 days ago note
+		const threeDaysAgoFile = await this.getDailyNote(threeDaysAgo);
+		if (threeDaysAgoFile) {
+			const content = await this.app.vault.read(threeDaysAgoFile);
+			const frontmatterInfo = getFrontMatterInfo(content);
+			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
+				result.threeDaysAgo = frontmatterInfo.frontmatter.todaysThought;
+			}
+		}
+		
+		// Check last week's note
+		const lastWeekFile = await this.getDailyNote(lastWeek);
+		if (lastWeekFile) {
+			const content = await this.app.vault.read(lastWeekFile);
+			const frontmatterInfo = getFrontMatterInfo(content);
+			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
+				result.lastWeek = frontmatterInfo.frontmatter.todaysThought;
+			}
+		}
+		
+		return result;
+	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
+class ThoughtModal extends Modal {
+	plugin: TodaysThoughtPlugin;
+	thoughtInput: HTMLTextAreaElement;
+
+	constructor(app: App, plugin: TodaysThoughtPlugin) {
 		super(app);
+		this.plugin = plugin;
 	}
 
 	onOpen() {
 		const {contentEl} = this;
-		contentEl.setText('Woah!');
+		
+		// Display random prompt
+		contentEl.createEl('h2', {text: this.plugin.getRandomPrompt()});
+		
+		// Create textarea for input
+		this.thoughtInput = contentEl.createEl('textarea', {
+			attr: {
+				rows: '6',
+				placeholder: 'Enter your thought here...'
+			}
+		});
+		this.thoughtInput.style.width = '100%';
+		this.thoughtInput.focus();
+		
+		// Add button container
+		const buttonContainer = contentEl.createDiv();
+		buttonContainer.style.display = 'flex';
+		buttonContainer.style.justifyContent = 'space-between';
+		buttonContainer.style.marginTop = '20px';
+		
+		// Add "No thoughts or time" button
+		const noThoughtsButton = buttonContainer.createEl('button', {text: 'No thoughts or time'});
+		noThoughtsButton.addEventListener('click', async () => {
+			await this.plugin.createOrUpdateDailyNote(window.moment(), 'no thoughts or time');
+			this.close();
+			
+			// Tomorrow's note will be created when the plugin is run tomorrow
+			new Notice('Saved: "No thoughts or time"');
+			
+			// Show previous thoughts
+			new PreviousThoughtsModal(this.app, this.plugin).open();
+		});
+		
+		// Add "Save" button
+		const saveButton = buttonContainer.createEl('button', {text: 'Save Thought'});
+		saveButton.addEventListener('click', async () => {
+			const thought = this.thoughtInput.value.trim();
+			if (thought) {
+				await this.plugin.createOrUpdateDailyNote(window.moment(), thought);
+				this.close();
+				new Notice('Thought saved!');
+				
+				// Show previous thoughts
+				new PreviousThoughtsModal(this.app, this.plugin).open();
+			} else {
+				new Notice('Please enter a thought or choose "No thoughts or time"');
+			}
+		});
 	}
 
 	onClose() {
@@ -107,28 +233,147 @@ class SampleModal extends Modal {
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+class PreviousThoughtsModal extends Modal {
+	plugin: TodaysThoughtPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: TodaysThoughtPlugin) {
+		super(app);
+		this.plugin = plugin;
+	}
+
+	async onOpen() {
+		const {contentEl} = this;
+		contentEl.empty();
+		
+		contentEl.createEl('h2', {text: 'Previous Thoughts'});
+		
+		// Show loading indicator
+		const loadingEl = contentEl.createEl('div', {text: 'Loading previous thoughts...'});
+		
+		try {
+			const previousThoughts = await this.plugin.getPreviousThoughts();
+			contentEl.removeChild(loadingEl);
+			
+			// Create a stylish container
+			const container = contentEl.createDiv();
+			container.style.display = 'flex';
+			container.style.flexDirection = 'column';
+			container.style.gap = '15px';
+			
+			// Today's thought (if already exists)
+			if (previousThoughts.today) {
+				this.createThoughtElement(container, 'Today', previousThoughts.today);
+			}
+			
+			// Yesterday's thought
+			this.createThoughtElement(container, 'Yesterday', previousThoughts.yesterday || 'No thought recorded');
+			
+			// 3 days ago thought
+			this.createThoughtElement(container, '3 Days Ago', previousThoughts.threeDaysAgo || 'No thought recorded');
+			
+			// Last week's thought
+			this.createThoughtElement(container, 'Last Week', previousThoughts.lastWeek || 'No thought recorded');
+			
+			// Create close button
+			const closeButton = contentEl.createEl('button', {text: 'Close'});
+			closeButton.style.marginTop = '20px';
+			closeButton.addEventListener('click', () => this.close());
+		} catch (error) {
+			contentEl.removeChild(loadingEl);
+			contentEl.createEl('div', {text: 'Error loading previous thoughts: ' + error.message, cls: 'error'});
+			
+			// Create close button
+			const closeButton = contentEl.createEl('button', {text: 'Close'});
+			closeButton.style.marginTop = '20px';
+			closeButton.addEventListener('click', () => this.close());
+		}
+	}
+
+	createThoughtElement(container: HTMLElement, title: string, content: string) {
+		const element = container.createDiv();
+		element.style.backgroundColor = 'var(--background-secondary)';
+		element.style.padding = '12px';
+		element.style.borderRadius = '5px';
+		
+		element.createEl('h3', {text: title});
+		element.createEl('p', {text: content});
+	}
+
+	onClose() {
+		const {contentEl} = this;
+		contentEl.empty();
+	}
+}
+
+class TodaysThoughtSettingTab extends PluginSettingTab {
+	plugin: TodaysThoughtPlugin;
+
+	constructor(app: App, plugin: TodaysThoughtPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
 		const {containerEl} = this;
-
 		containerEl.empty();
 
+		containerEl.createEl('h2', {text: 'Today\'s Thought Settings'});
+
+		// Daily Note folder setting
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
+			.setName('Daily notes folder')
+			.setDesc('Folder where your daily notes are stored')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('/')
+				.setValue(this.plugin.settings.dailyNoteFolder)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.dailyNoteFolder = value;
 					await this.plugin.saveSettings();
+				}));
+		
+		// Daily Note format setting
+		new Setting(containerEl)
+			.setName('Daily note format')
+			.setDesc('Format for daily note filenames (uses moment.js format)')
+			.addText(text => text
+				.setPlaceholder('YYYY-MM-DD')
+				.setValue(this.plugin.settings.dailyNoteFormat)
+				.onChange(async (value) => {
+					this.plugin.settings.dailyNoteFormat = value;
+					await this.plugin.saveSettings();
+				}));
+		
+		// Prompt settings
+		containerEl.createEl('h3', {text: 'Prompts'});
+		containerEl.createEl('p', {text: 'Configure the prompts that will randomly appear when recording your daily thought.'});
+
+		// Create settings for each prompt
+		this.plugin.settings.prompts.forEach((prompt, index) => {
+			new Setting(containerEl)
+				.setName(`Prompt ${index + 1}`)
+				.addText(text => text
+					.setValue(prompt)
+					.onChange(async (value) => {
+						this.plugin.settings.prompts[index] = value;
+						await this.plugin.saveSettings();
+					}))
+				.addButton(button => button
+					.setButtonText('Delete')
+					.onClick(async () => {
+						this.plugin.settings.prompts.splice(index, 1);
+						await this.plugin.saveSettings();
+						this.display();
+					}));
+		});
+
+		// Button to add new prompt
+		new Setting(containerEl)
+			.addButton(button => button
+				.setButtonText('Add New Prompt')
+				.onClick(async () => {
+					this.plugin.settings.prompts.push('What are you thinking about today?');
+					await this.plugin.saveSettings();
+					this.display();
 				}));
 	}
 }

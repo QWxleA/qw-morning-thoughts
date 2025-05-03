@@ -1,8 +1,54 @@
-/*
+/* Styling for Today's Thought Plugin */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
-*/
+/* Prompt container in the modal */
+.prompt-container {
+    background-color: var(--background-secondary-alt);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid var(--background-modifier-border);
+  }
+  
+  /* Thought input textarea */
+  .thought-input {
+    width: 100%;
+    height: 150px;
+    padding: 12px;
+    box-sizing: border-box;
+    resize: vertical;
+    font-size: 16px;
+    border-radius: 5px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+  }
+  
+  /* Button styling */
+  .thought-button-container {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
+  
+  .thought-button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  /* Previous thoughts container */
+  .previous-thought {
+    background-color: var(--background-secondary);
+    padding: 12px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    border: 1px solid var(--background-modifier-border);
+  }
+  
+  /* Settings page prompts container */
+  .prompts-container {
+    background-color: var(--background-secondary-alt);
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border: 1px solid var(--background-modifier-border);
+  }
