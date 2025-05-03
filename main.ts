@@ -6,7 +6,6 @@ interface TodaysThoughtSettings {
 	dailyNoteFormat: string;
 }
 
-//FIXME read locations from settings
 const DEFAULT_SETTINGS: TodaysThoughtSettings = {
 	prompts: [
 		"What's on your mind right now?",
@@ -42,6 +41,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		// Nothing specific to unload
 	}
 
+
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
@@ -65,6 +65,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		
 		let file = vault.getAbstractFileByPath(filePath);
 		
+		console.log(`file: ${file}`)
 		if (file instanceof TFile) {
 			return file;
 		}
@@ -178,27 +179,29 @@ class ThoughtModal extends Modal {
 	onOpen() {
 		const {contentEl} = this;
 		
+		// Create prompt container with different background
+		const promptContainer = contentEl.createDiv({cls: 'prompt-container'});
+		
 		// Display random prompt
-		contentEl.createEl('h2', {text: this.plugin.getRandomPrompt()});
+		promptContainer.createEl('h2', {text: this.plugin.getRandomPrompt()});
 		
 		// Create textarea for input
 		this.thoughtInput = contentEl.createEl('textarea', {
+			cls: 'thought-input',
 			attr: {
-				rows: '6',
 				placeholder: 'Enter your thought here...'
 			}
 		});
-		this.thoughtInput.style.width = '100%';
 		this.thoughtInput.focus();
 		
 		// Add button container
-		const buttonContainer = contentEl.createDiv();
-		buttonContainer.style.display = 'flex';
-		buttonContainer.style.justifyContent = 'space-between';
-		buttonContainer.style.marginTop = '20px';
+		const buttonContainer = contentEl.createDiv({cls: 'thought-button-container'});
 		
 		// Add "No thoughts or time" button
-		const noThoughtsButton = buttonContainer.createEl('button', {text: 'No thoughts or time'});
+		const noThoughtsButton = buttonContainer.createEl('button', {
+			text: 'No thoughts or time',
+			cls: 'thought-button'
+		});
 		noThoughtsButton.addEventListener('click', async () => {
 			await this.plugin.createOrUpdateDailyNote(window.moment(), 'no thoughts or time');
 			this.close();
@@ -211,7 +214,10 @@ class ThoughtModal extends Modal {
 		});
 		
 		// Add "Save" button
-		const saveButton = buttonContainer.createEl('button', {text: 'Save Thought'});
+		const saveButton = buttonContainer.createEl('button', {
+			text: 'Save Thought',
+			cls: 'thought-button'
+		});
 		saveButton.addEventListener('click', async () => {
 			const thought = this.thoughtInput.value.trim();
 			if (thought) {
@@ -254,7 +260,7 @@ class PreviousThoughtsModal extends Modal {
 			const previousThoughts = await this.plugin.getPreviousThoughts();
 			contentEl.removeChild(loadingEl);
 			
-			// Create a stylish container
+			// Create a container
 			const container = contentEl.createDiv();
 			container.style.display = 'flex';
 			container.style.flexDirection = 'column';
@@ -275,7 +281,10 @@ class PreviousThoughtsModal extends Modal {
 			this.createThoughtElement(container, 'Last Week', previousThoughts.lastWeek || 'No thought recorded');
 			
 			// Create close button
-			const closeButton = contentEl.createEl('button', {text: 'Close'});
+			const closeButton = contentEl.createEl('button', {
+				text: 'Close',
+				cls: 'thought-button'
+			});
 			closeButton.style.marginTop = '20px';
 			closeButton.addEventListener('click', () => this.close());
 		} catch (error) {
@@ -283,17 +292,17 @@ class PreviousThoughtsModal extends Modal {
 			contentEl.createEl('div', {text: 'Error loading previous thoughts: ' + error.message, cls: 'error'});
 			
 			// Create close button
-			const closeButton = contentEl.createEl('button', {text: 'Close'});
+			const closeButton = contentEl.createEl('button', {
+				text: 'Close',
+				cls: 'thought-button'
+			});
 			closeButton.style.marginTop = '20px';
 			closeButton.addEventListener('click', () => this.close());
 		}
 	}
 
 	createThoughtElement(container: HTMLElement, title: string, content: string) {
-		const element = container.createDiv();
-		element.style.backgroundColor = 'var(--background-secondary)';
-		element.style.padding = '12px';
-		element.style.borderRadius = '5px';
+		const element = container.createDiv({cls: 'previous-thought'});
 		
 		element.createEl('h3', {text: title});
 		element.createEl('p', {text: content});
@@ -343,13 +352,14 @@ class TodaysThoughtSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 		
-		// Prompt settings
-		containerEl.createEl('h3', {text: 'Prompts'});
-		containerEl.createEl('p', {text: 'Configure the prompts that will randomly appear when recording your daily thought.'});
+		// Prompt settings - Create styled container
+		const promptsContainer = containerEl.createDiv({cls: 'prompts-container'});
+		promptsContainer.createEl('h3', {text: 'Prompts'});
+		promptsContainer.createEl('p', {text: 'Configure the prompts that will randomly appear when recording your daily thought.'});
 
 		// Create settings for each prompt
 		this.plugin.settings.prompts.forEach((prompt, index) => {
-			new Setting(containerEl)
+			new Setting(promptsContainer)
 				.setName(`Prompt ${index + 1}`)
 				.addText(text => text
 					.setValue(prompt)
@@ -367,7 +377,7 @@ class TodaysThoughtSettingTab extends PluginSettingTab {
 		});
 
 		// Button to add new prompt
-		new Setting(containerEl)
+		new Setting(promptsContainer)
 			.addButton(button => button
 				.setButtonText('Add New Prompt')
 				.onClick(async () => {
