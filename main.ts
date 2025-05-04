@@ -1,9 +1,20 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, getFrontMatterInfo, stringifyYaml } from 'obsidian';
+import { getDailyNoteFile } from './src/daily-note-utils';
+import { updateFrontmatterProperty } from './src/frontmatter-utils';
 
 interface TodaysThoughtSettings {
 	prompts: string[];
 	dailyNoteFolder: string;
 	dailyNoteFormat: string;
+}
+
+interface frontmatter {
+	todaysThought?: string;
+}
+
+interface frontmatterInfo {
+	frontmatter?: string;
+	content?: string;
 }
 
 const DEFAULT_SETTINGS: TodaysThoughtSettings = {
@@ -54,6 +65,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		return this.settings.prompts[Math.floor(Math.random() * this.settings.prompts.length)];
 	}
 
+	//REMOVEME
 	async getDailyNote(date: moment.Moment): Promise<TFile | null> {
 		const { vault } = this.app;
 		const { dailyNoteFolder, dailyNoteFormat } = this.settings;
@@ -75,41 +87,25 @@ export default class TodaysThoughtPlugin extends Plugin {
 
 	async createOrUpdateDailyNote(date: moment.Moment, thought: string): Promise<void> {
 		const { vault } = this.app;
-		const { dailyNoteFolder, dailyNoteFormat } = this.settings;
-		
-		// Create folder if it doesn't exist
-		if (dailyNoteFolder !== '/' && !vault.getAbstractFileByPath(dailyNoteFolder)) {
-			await vault.createFolder(dailyNoteFolder);
-		}
-		
-		const fileName = date.format(dailyNoteFormat) + '.md';
-		const folderPath = dailyNoteFolder !== '/' ? dailyNoteFolder : '';
-		const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
-		
-		let file = vault.getAbstractFileByPath(filePath);
-		
-		if (!(file instanceof TFile)) {
-			// Create new note if it doesn't exist
-			file = await vault.create(filePath, '---\n---\n\n');
-		}
-		
-		// Now update the frontmatter
-		if (file instanceof TFile) {
-			const content = await vault.read(file);
-			const frontmatterInfo = getFrontMatterInfo(content);
-			let frontmatter = frontmatterInfo.frontmatter ? {...frontmatterInfo.frontmatter} : {};
-			
-			// Add today's thought to frontmatter
-			frontmatter.todaysThought = thought;
-			
-			// Create new content with updated frontmatter
-			const newContent = `---\n${stringifyYaml(frontmatter)}---\n${frontmatterInfo.content || '\n'}`;
-			
-			// Write back to file
-			await vault.modify(file, newContent);
+		const today = window.moment();
+		const todayFile = await getDailyNoteFile(this.app, this.settings, today);
+		// console.log(todayFile?.path)
+		if (todayFile instanceof TFile) {
+			// Update the frontmatter
+			const success = await updateFrontmatterProperty(
+				this.app,
+				todayFile,
+				'todaysThought',
+				thought
+			);
+	
+			if (success) { new Notice(`Updated todaysThought of "${todayFile.name}" to 💭`); } 
+		} else {
+			new Notice('Failed to update todaysThought');			
 		}
 	}
 
+	//FIXME copy-pasta!
 	async getPreviousThoughts(): Promise<{today: string, yesterday: string, threeDaysAgo: string, lastWeek: string}> {
 		const today = window.moment();
 		const yesterday = window.moment().subtract(1, 'day');
@@ -134,7 +130,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		}
 		
 		// Check yesterday's note
-		const yesterdayFile = await this.getDailyNote(yesterday);
+		const yesterdayFile = await getDailyNoteFile(yesterday);
 		if (yesterdayFile) {
 			const content = await this.app.vault.read(yesterdayFile);
 			const frontmatterInfo = getFrontMatterInfo(content);
@@ -144,7 +140,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		}
 		
 		// Check 3 days ago note
-		const threeDaysAgoFile = await this.getDailyNote(threeDaysAgo);
+		const threeDaysAgoFile = await getDailyNoteFile(threeDaysAgo);
 		if (threeDaysAgoFile) {
 			const content = await this.app.vault.read(threeDaysAgoFile);
 			const frontmatterInfo = getFrontMatterInfo(content);
@@ -154,7 +150,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		}
 		
 		// Check last week's note
-		const lastWeekFile = await this.getDailyNote(lastWeek);
+		const lastWeekFile = await getDailyNoteFile(lastWeek);
 		if (lastWeekFile) {
 			const content = await this.app.vault.read(lastWeekFile);
 			const frontmatterInfo = getFrontMatterInfo(content);
@@ -220,6 +216,7 @@ class ThoughtModal extends Modal {
 		});
 		saveButton.addEventListener('click', async () => {
 			const thought = this.thoughtInput.value.trim();
+			console.log(`thought 💭: ${thought}`)
 			if (thought) {
 				await this.plugin.createOrUpdateDailyNote(window.moment(), thought);
 				this.close();
