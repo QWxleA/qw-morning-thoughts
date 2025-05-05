@@ -1,5 +1,5 @@
 {
-	"name": "todays-thought",
+	"name": "morning-thoughts",
 	"version": "1.0.0",
 	"description": "A minimalist plugin to capture your daily thoughts with historical reflection",
 	"main": "main.js",
