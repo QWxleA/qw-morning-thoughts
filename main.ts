@@ -72,26 +72,6 @@ export default class TodaysThoughtPlugin extends Plugin {
 		return this.settings.prompts[Math.floor(Math.random() * this.settings.prompts.length)];
 	}
 
-	//REMOVEME
-	// async getDailyNote(date: moment.Moment): Promise<TFile | null> {
-	// 	const { vault } = this.app;
-	// 	const { dailyNoteFolder, dailyNoteFormat } = this.settings;
-		
-	// 	// Use moment.js format (already included in Obsidian)
-	// 	const fileName = date.format(dailyNoteFormat) + '.md';
-	// 	const folderPath = dailyNoteFolder !== '/' ? dailyNoteFolder : '';
-	// 	const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
-		
-	// 	let file = vault.getAbstractFileByPath(filePath);
-		
-	// 	console.log(`file: ${file}`)
-	// 	if (file instanceof TFile) {
-	// 		return file;
-	// 	}
-		
-	// 	return null;
-	// }
-
 	/**
 	 * create or update today's daily note frontmatter key: todaysThought
 	 * @param date - Moment date object to use (typically today)
@@ -125,8 +105,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		const yesterday = window.moment().subtract(1, 'day');
 		const threeDaysAgo = window.moment().subtract(3, 'days');
 		const lastWeek = window.moment().subtract(7, 'days');
-		console.log("getPrevious")
-		console.log(this.settings)
+
 		const result = {
 			today: await getThoughtForDate(this.app, this.settings, today),
 			yesterday: await getThoughtForDate(this.app, this.settings, yesterday),
@@ -197,7 +176,7 @@ class ThoughtModal extends Modal {
 		});
 		saveButton.addEventListener('click', async () => {
 			const thought = this.thoughtInput.value.trim();
-			console.log(`thought 💭: ${thought}`)
+			// console.log(`thought 💭: ${thought}`)
 			if (thought) {
 				await this.plugin.createOrUpdateDailyNote(window.moment(), thought);
 				this.close();
