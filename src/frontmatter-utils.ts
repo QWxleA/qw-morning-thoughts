@@ -1,4 +1,20 @@
 import { App, TFile } from 'obsidian';
+import { getDailyNoteFile } from './daily-note-utils';
+import type { DailyNoteSettings } from '../main'; // adjust path if needed
+
+/**
+ * Retrieves the 'todaysThought' frontmatter value from the daily note of a given date.
+ * 
+ * @param date - A Moment.js date object representing the day to retrieve the thought for
+ * @returns A Promise resolving to the 'todaysThought' string if found, or null if the note doesn't exist or lacks the property
+ */
+export async function getThoughtForDate(app: App, settings: DailyNoteSettings, date: moment.Moment): Promise<string | null> {
+	const file = await getDailyNoteFile(app, settings, date);
+	if (file) {
+		return await getFrontmatterProperty(app, file, 'todaysThought');
+	}
+	return null;
+}
 
 /**
  * Updates a frontmatter property in a markdown file

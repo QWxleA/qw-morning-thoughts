@@ -1,8 +1,8 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, getFrontMatterInfo, stringifyYaml } from 'obsidian';
+import { getFrontmatterProperty, updateFrontmatterProperty, getThoughtForDate } from './src/frontmatter-utils';
 import { getDailyNoteFile } from './src/daily-note-utils';
-import { getFrontmatterProperty, updateFrontmatterProperty } from './src/frontmatter-utils';
 
-interface TodaysThoughtSettings {
+export interface DailyNoteSettings {
 	prompts: string[];
 	dailyNoteFolder: string;
 	dailyNoteFormat: string;
@@ -19,12 +19,12 @@ interface frontmatterInfo {
 
 // interface result {
 // 	today: string | null,
-// 	yesterday: string,
-// 	threeDaysAgo: string,
-// 	lastWeek: string
+// 	yesterday: string | null,
+// 	threeDaysAgo: string | null,
+// 	lastWeek: string | null
 // };
 
-const DEFAULT_SETTINGS: TodaysThoughtSettings = {
+const DEFAULT_SETTINGS: DailyNoteSettings = {
 	prompts: [
 		"What's on your mind right now?",
 		"What are you thinking about today?",
@@ -37,7 +37,7 @@ const DEFAULT_SETTINGS: TodaysThoughtSettings = {
 }
 
 export default class TodaysThoughtPlugin extends Plugin {
-	settings: TodaysThoughtSettings;
+	settings: DailyNoteSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -129,21 +129,13 @@ export default class TodaysThoughtPlugin extends Plugin {
 		const lastWeek = window.moment().subtract(7, 'days');
 	
 		const result = {
-			today: await this.getThoughtForDate(today),
-			yesterday: await this.getThoughtForDate(yesterday),
-			threeDaysAgo: await this.getThoughtForDate(threeDaysAgo),
-			lastWeek: await this.getThoughtForDate(lastWeek)
+			today: await getThoughtForDate(this.app, this.settings, today),
+			yesterday: await getThoughtForDate(this.app, this.settings, yesterday),
+			threeDaysAgo: await getThoughtForDate(this.app, this.settings, threeDaysAgo),
+			lastWeek: await getThoughtForDate(this.app, this.settings, lastWeek)
 		};
 	
 		return result;
-	}
-	
-	private async getThoughtForDate(date: moment.Moment): Promise<string | null> {
-		const file = await getDailyNoteFile(this.app, this.settings, date);
-		if (file) {
-			return await getFrontmatterProperty(this.app, file, 'todaysThought');
-		}
-		return null;
 	}
 }
 
@@ -247,18 +239,9 @@ class PreviousThoughtsModal extends Modal {
 			container.style.flexDirection = 'column';
 			container.style.gap = '15px';
 			
-			// Today's thought (if already exists)
-			if (previousThoughts.today) {
-				this.createThoughtElement(container, 'Today', previousThoughts.today);
-			}
-			
-			// Yesterday's thought
+			this.createThoughtElement(container, 'Today', previousThoughts.today || 'No thought recorded');
 			this.createThoughtElement(container, 'Yesterday', previousThoughts.yesterday || 'No thought recorded');
-			
-			// 3 days ago thought
 			this.createThoughtElement(container, '3 Days Ago', previousThoughts.threeDaysAgo || 'No thought recorded');
-			
-			// Last week's thought
 			this.createThoughtElement(container, 'Last Week', previousThoughts.lastWeek || 'No thought recorded');
 			
 			// Create close button
