@@ -73,24 +73,24 @@ export default class TodaysThoughtPlugin extends Plugin {
 	}
 
 	//REMOVEME
-	async getDailyNote(date: moment.Moment): Promise<TFile | null> {
-		const { vault } = this.app;
-		const { dailyNoteFolder, dailyNoteFormat } = this.settings;
+	// async getDailyNote(date: moment.Moment): Promise<TFile | null> {
+	// 	const { vault } = this.app;
+	// 	const { dailyNoteFolder, dailyNoteFormat } = this.settings;
 		
-		// Use moment.js format (already included in Obsidian)
-		const fileName = date.format(dailyNoteFormat) + '.md';
-		const folderPath = dailyNoteFolder !== '/' ? dailyNoteFolder : '';
-		const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
+	// 	// Use moment.js format (already included in Obsidian)
+	// 	const fileName = date.format(dailyNoteFormat) + '.md';
+	// 	const folderPath = dailyNoteFolder !== '/' ? dailyNoteFolder : '';
+	// 	const filePath = folderPath ? `${folderPath}/${fileName}` : fileName;
 		
-		let file = vault.getAbstractFileByPath(filePath);
+	// 	let file = vault.getAbstractFileByPath(filePath);
 		
-		console.log(`file: ${file}`)
-		if (file instanceof TFile) {
-			return file;
-		}
+	// 	console.log(`file: ${file}`)
+	// 	if (file instanceof TFile) {
+	// 		return file;
+	// 	}
 		
-		return null;
-	}
+	// 	return null;
+	// }
 
 	/**
 	 * create or update today's daily note frontmatter key: todaysThought
@@ -101,9 +101,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 		const { vault } = this.app;
 		const today = window.moment();
 		const todayFile = await getDailyNoteFile(this.app, this.settings, today);
-		// console.log(todayFile?.path)
 		if (todayFile instanceof TFile) {
-			// Update the frontmatter
 			const success = await updateFrontmatterProperty(
 				this.app,
 				todayFile,
@@ -127,7 +125,8 @@ export default class TodaysThoughtPlugin extends Plugin {
 		const yesterday = window.moment().subtract(1, 'day');
 		const threeDaysAgo = window.moment().subtract(3, 'days');
 		const lastWeek = window.moment().subtract(7, 'days');
-	
+		console.log("getPrevious")
+		console.log(this.settings)
 		const result = {
 			today: await getThoughtForDate(this.app, this.settings, today),
 			yesterday: await getThoughtForDate(this.app, this.settings, yesterday),
@@ -140,6 +139,7 @@ export default class TodaysThoughtPlugin extends Plugin {
 }
 
 class ThoughtModal extends Modal {
+	settings: DailyNoteSettings;
 	plugin: TodaysThoughtPlugin;
 	thoughtInput: HTMLTextAreaElement;
 
@@ -148,7 +148,7 @@ class ThoughtModal extends Modal {
 		this.plugin = plugin;
 	}
 
-	onOpen() {
+	async onOpen() {
 		const {contentEl} = this;
 		
 		// Create prompt container with different background
@@ -157,13 +157,16 @@ class ThoughtModal extends Modal {
 		// Display random prompt
 		promptContainer.createEl('h2', {text: this.plugin.getRandomPrompt()});
 		
+		const previousThoughts = await this.plugin.getPreviousThoughts();
+
 		// Create textarea for input
 		this.thoughtInput = contentEl.createEl('textarea', {
 			cls: 'thought-input',
-			attr: {
-				placeholder: 'Enter your thought here...'
-			}
+			// attr: {
+			// 	placeholder: previousThoughts.today ?? 'Enter your thought here...'
+			// }
 		});
+		this.thoughtInput.value = previousThoughts.today ?? 'Enter your thought here...'
 		this.thoughtInput.focus();
 		
 		// Add button container
