@@ -162,11 +162,13 @@ class ThoughtModal extends Modal {
 		// Create textarea for input
 		this.thoughtInput = contentEl.createEl('textarea', {
 			cls: 'thought-input',
-			// attr: {
-			// 	placeholder: previousThoughts.today ?? 'Enter your thought here...'
-			// }
+			attr: {
+				placeholder: 'Enter your thought here...'
+			}
 		});
-		this.thoughtInput.value = previousThoughts.today ?? 'Enter your thought here...'
+		if (previousThoughts) {
+			this.thoughtInput.value = previousThoughts.today || ''
+		}
 		this.thoughtInput.focus();
 		
 		// Add button container
