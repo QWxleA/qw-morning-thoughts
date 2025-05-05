@@ -1,6 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, getFrontMatterInfo, stringifyYaml } from 'obsidian';
 import { getDailyNoteFile } from './src/daily-note-utils';
-import { updateFrontmatterProperty } from './src/frontmatter-utils';
+import { getFrontmatterProperty, updateFrontmatterProperty } from './src/frontmatter-utils';
 
 interface TodaysThoughtSettings {
 	prompts: string[];
@@ -16,6 +16,13 @@ interface frontmatterInfo {
 	frontmatter?: string;
 	content?: string;
 }
+
+// interface result {
+// 	today: string | null,
+// 	yesterday: string,
+// 	threeDaysAgo: string,
+// 	lastWeek: string
+// };
 
 const DEFAULT_SETTINGS: TodaysThoughtSettings = {
 	prompts: [
@@ -85,6 +92,11 @@ export default class TodaysThoughtPlugin extends Plugin {
 		return null;
 	}
 
+	/**
+	 * create or update today's daily note frontmatter key: todaysThought
+	 * @param date - Moment date object to use (typically today)
+	 * @param thought - string to be added to todaysThought
+	 */
 	async createOrUpdateDailyNote(date: moment.Moment, thought: string): Promise<void> {
 		const { vault } = this.app;
 		const today = window.moment();
@@ -105,61 +117,33 @@ export default class TodaysThoughtPlugin extends Plugin {
 		}
 	}
 
-	//FIXME copy-pasta!
-	async getPreviousThoughts(): Promise<{today: string, yesterday: string, threeDaysAgo: string, lastWeek: string}> {
+	async getPreviousThoughts(): Promise<{
+		today: string | null;
+		yesterday: string | null;
+		threeDaysAgo: string | null;
+		lastWeek: string | null;
+	}> {
 		const today = window.moment();
 		const yesterday = window.moment().subtract(1, 'day');
 		const threeDaysAgo = window.moment().subtract(3, 'days');
 		const lastWeek = window.moment().subtract(7, 'days');
-		
+	
 		const result = {
-			today: '',
-			yesterday: '',
-			threeDaysAgo: '',
-			lastWeek: ''
+			today: await this.getThoughtForDate(today),
+			yesterday: await this.getThoughtForDate(yesterday),
+			threeDaysAgo: await this.getThoughtForDate(threeDaysAgo),
+			lastWeek: await this.getThoughtForDate(lastWeek)
 		};
-		
-		// Check today's note
-		const todayFile = await this.getDailyNote(today);
-		if (todayFile) {
-			const content = await this.app.vault.read(todayFile);
-			const frontmatterInfo = getFrontMatterInfo(content);
-			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
-				result.today = frontmatterInfo.frontmatter.todaysThought;
-			}
-		}
-		
-		// Check yesterday's note
-		const yesterdayFile = await getDailyNoteFile(yesterday);
-		if (yesterdayFile) {
-			const content = await this.app.vault.read(yesterdayFile);
-			const frontmatterInfo = getFrontMatterInfo(content);
-			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
-				result.yesterday = frontmatterInfo.frontmatter.todaysThought;
-			}
-		}
-		
-		// Check 3 days ago note
-		const threeDaysAgoFile = await getDailyNoteFile(threeDaysAgo);
-		if (threeDaysAgoFile) {
-			const content = await this.app.vault.read(threeDaysAgoFile);
-			const frontmatterInfo = getFrontMatterInfo(content);
-			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
-				result.threeDaysAgo = frontmatterInfo.frontmatter.todaysThought;
-			}
-		}
-		
-		// Check last week's note
-		const lastWeekFile = await getDailyNoteFile(lastWeek);
-		if (lastWeekFile) {
-			const content = await this.app.vault.read(lastWeekFile);
-			const frontmatterInfo = getFrontMatterInfo(content);
-			if (frontmatterInfo.frontmatter && frontmatterInfo.frontmatter.todaysThought) {
-				result.lastWeek = frontmatterInfo.frontmatter.todaysThought;
-			}
-		}
-		
+	
 		return result;
+	}
+	
+	private async getThoughtForDate(date: moment.Moment): Promise<string | null> {
+		const file = await getDailyNoteFile(this.app, this.settings, date);
+		if (file) {
+			return await getFrontmatterProperty(this.app, file, 'todaysThought');
+		}
+		return null;
 	}
 }
 
@@ -220,7 +204,7 @@ class ThoughtModal extends Modal {
 			if (thought) {
 				await this.plugin.createOrUpdateDailyNote(window.moment(), thought);
 				this.close();
-				new Notice('Thought saved!');
+				// new Notice('Thought saved!');
 				
 				// Show previous thoughts
 				new PreviousThoughtsModal(this.app, this.plugin).open();
