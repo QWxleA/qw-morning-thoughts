@@ -92,6 +92,7 @@ export function getDailyNote(
     let formattedDate: string = date.format(dailyNoteFormat);
 
     // Use settings, unless core plugin is enabled 
+    // @ts-ignore: Property 'internalPlugins' does not exist on type 'App'
     const dailyNotesPlugin = app.internalPlugins.getPluginById("daily-notes");
     if (dailyNotesPlugin?.enabled) {
         const dailySettings = dailyNotesPlugin.instance.options;
